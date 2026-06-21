@@ -8,13 +8,7 @@ const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 export const upsertEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z
-      .object({
-        date: dateStr,
-        has_headache: z.boolean(),
-        severity: severityEnum.nullable(),
-      })
-      .parse(d),
+    z.object({ date: dateStr, has_headache: z.boolean(), severity: severityEnum.nullable() }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const row = {
@@ -58,19 +52,70 @@ export const getEntriesInRange = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+export const getAllEntries = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: rows, error } = await context.supabase
+      .from("log_entries")
+      .select("entry_date, has_headache, severity")
+      .eq("user_id", context.userId)
+      .order("entry_date", { ascending: true });
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
+
 export const bulkMarkNoHeadache = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ dates: z.array(dateStr).min(1).max(400) }).parse(d))
   .handler(async ({ data, context }) => {
     const rows = data.dates.map((date) => ({
-      user_id: context.userId,
-      entry_date: date,
-      has_headache: false,
-      severity: null,
+      user_id: context.userId, entry_date: date, has_headache: false, severity: null,
     }));
     const { error } = await context.supabase
       .from("log_entries")
       .upsert(rows, { onConflict: "user_id,entry_date" });
     if (error) throw new Error(error.message);
     return { inserted: rows.length };
+  });
+
+export const deleteEntriesInRange = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ start: dateStr.nullable(), end: dateStr.nullable() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    let q = context.supabase.from("log_entries").delete().eq("user_id", context.userId);
+    if (data.start) q = q.gte("entry_date", data.start);
+    if (data.end) q = q.lte("entry_date", data.end);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const importEntries = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      entries: z.array(z.object({
+        date: dateStr, has_headache: z.boolean(), severity: severityEnum.nullable(),
+      })).min(1).max(5000),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const rows = data.entries.map((e) => ({
+      user_id: context.userId,
+      entry_date: e.date,
+      has_headache: e.has_headache,
+      severity: e.has_headache ? e.severity : null,
+    }));
+    // Chunk to be safe with row limits
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const slice = rows.slice(i, i + CHUNK);
+      const { error } = await context.supabase
+        .from("log_entries")
+        .upsert(slice, { onConflict: "user_id,entry_date" });
+      if (error) throw new Error(error.message);
+    }
+    return { imported: rows.length };
   });
