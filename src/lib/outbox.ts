@@ -7,7 +7,7 @@ export type OutboxOp =
   | { kind: "upsert"; date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }
   | { kind: "deleteOne"; date: string }
   | { kind: "bulkNo"; dates: string[] }
-  | { kind: "deleteRange"; start: string; end: string }
+  | { kind: "deleteRange"; start: string | null; end: string | null }
   | { kind: "import"; entries: Array<{ date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }> };
 
 interface QueuedItem { id?: number; op: OutboxOp; ts: number; tries: number }
