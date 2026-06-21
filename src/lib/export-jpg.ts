@@ -16,6 +16,9 @@ const COLORS = {
   severe: "#C0392B",
 };
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
 export interface ExportArgs {
   start: string;
   end: string;
@@ -24,7 +27,7 @@ export interface ExportArgs {
 }
 
 export async function downloadSummaryJPG(args: ExportArgs) {
-  const W = 1200, H = 1600;
+  const W = 1200, H = 1800;
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
@@ -49,11 +52,9 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   }
   const logged = total - unlogged;
 
-  // Margins
   const M = 80;
   let y = M;
 
-  // Zone 1: Header
   ctx.fillStyle = COLORS.muted;
   ctx.font = "500 22px ui-sans-serif, system-ui, -apple-system, Inter, sans-serif";
   ctx.textAlign = "left";
@@ -70,7 +71,6 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   ctx.fillText(ageGender, W - M, y + 22);
   y += 60;
 
-  // Date range
   ctx.textAlign = "center";
   ctx.fillStyle = COLORS.text;
   ctx.font = "700 44px ui-sans-serif, system-ui, sans-serif";
@@ -82,17 +82,15 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke();
   y += 60;
 
-  // Zone 2: Big metrics
+  // Big metrics
   const colW = (W - M * 2) / 2;
   ctx.textAlign = "center";
-  // Headache
   ctx.fillStyle = COLORS.crimson;
   ctx.font = "800 140px ui-sans-serif, system-ui, sans-serif";
   ctx.fillText(String(headache), M + colW / 2, y + 110);
   ctx.fillStyle = COLORS.text;
   ctx.font = "600 22px ui-sans-serif, system-ui, sans-serif";
   ctx.fillText("Headache Days", M + colW / 2, y + 150);
-  // Pain-free
   ctx.fillStyle = COLORS.blue;
   ctx.font = "800 140px ui-sans-serif, system-ui, sans-serif";
   ctx.fillText(String(painfreeCount), M + colW + colW / 2, y + 110);
@@ -108,7 +106,7 @@ export async function downloadSummaryJPG(args: ExportArgs) {
     y += 30;
   }
 
-  // Zone 3: Severity breakdown
+  // Severity breakdown
   ctx.textAlign = "left";
   ctx.fillStyle = COLORS.text;
   ctx.font = "700 26px ui-sans-serif, system-ui, sans-serif";
@@ -124,7 +122,6 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   for (const b of breakdown) {
     const pct = headache ? Math.round((b.count / denom) * 100) : 0;
     const barW = (W - M * 2);
-    // bg
     ctx.fillStyle = "#F2F2F2"; roundRect(ctx, M, y, barW, 38, 8); ctx.fill();
     ctx.fillStyle = b.color; roundRect(ctx, M, y, Math.max(2, barW * (pct / 100)), 38, 8); ctx.fill();
     ctx.fillStyle = COLORS.text;
@@ -134,33 +131,55 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   }
   y += 20;
 
-  // Zone 4: Pattern matrix
+  // ---- Daily Pattern (with month label on first-of-month, date+day under each block) ----
   ctx.fillStyle = COLORS.text;
   ctx.font = "700 26px ui-sans-serif, system-ui, sans-serif";
   ctx.fillText("Daily Pattern", M, y + 24);
-  y += 44;
+  y += 50;
 
   const availW = W - M * 2;
-  const availH = H - y - M - 60;
-  // pick square size to fit
+  const footerH = 70;
+  const availH = H - y - M - footerH;
+
+  // Each "block" occupies a column with: optional month label (top), colored square, date number, dow label.
   const N = days.length;
-  let cols = Math.min(N, 30);
-  let cellSize = Math.floor(availW / cols) - 4;
+  // pick columns based on N — fit text underneath
+  const gap = 6;
+  const monthLabelH = 18;
+  const dateH = 16;
+  const dowH = 14;
+  const textH = monthLabelH + dateH + dowH + 8;
+  let cols = Math.min(N, 14);
+  let cellSize = Math.floor((availW - (cols - 1) * gap) / cols);
+  let rowH = cellSize + textH + 10;
   let rows = Math.ceil(N / cols);
-  while (rows * (cellSize + 4) > availH && cellSize > 8) {
-    cellSize -= 2;
-    cols = Math.floor(availW / (cellSize + 4));
+  while (rows * rowH > availH && cols < N) {
+    cols++;
+    cellSize = Math.floor((availW - (cols - 1) * gap) / cols);
+    rowH = cellSize + textH + 10;
     rows = Math.ceil(N / cols);
   }
-  const gridW = cols * (cellSize + 4) - 4;
+  while (cellSize < 18 && cols > 4) {
+    cols--;
+    cellSize = Math.floor((availW - (cols - 1) * gap) / cols);
+    rowH = cellSize + textH + 10;
+    rows = Math.ceil(N / cols);
+    if (rows * rowH > availH) break;
+  }
+
+  const gridW = cols * cellSize + (cols - 1) * gap;
   const startX = M + (availW - gridW) / 2;
 
+  // track which month we've already labeled in the loop
+  let lastMonth = -1;
   for (let i = 0; i < N; i++) {
     const r = Math.floor(i / cols);
     const c = i % cols;
-    const x = startX + c * (cellSize + 4);
-    const cy = y + r * (cellSize + 4);
-    const e = map.get(days[i]);
+    const x = startX + c * (cellSize + gap);
+    const cy = y + r * rowH;
+    const iso = days[i];
+    const d = parseISODate(iso);
+    const e = map.get(iso);
     const color = !e
       ? COLORS.unlogged
       : !e.has_headache
@@ -170,9 +189,31 @@ export async function downloadSummaryJPG(args: ExportArgs) {
           : e.severity === "moderate"
             ? COLORS.moderate
             : COLORS.severe;
+
+    // month label
+    const isFirstOfMonth = d.getMonth() !== lastMonth;
+    if (isFirstOfMonth) {
+      lastMonth = d.getMonth();
+      ctx.fillStyle = COLORS.text;
+      ctx.font = `700 ${Math.min(14, Math.max(10, cellSize * 0.4))}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(`${MONTHS[d.getMonth()]} ${d.getFullYear() % 100}`, x + cellSize / 2, cy + monthLabelH - 4);
+    }
+
+    // colored square
+    const sqY = cy + monthLabelH;
     ctx.fillStyle = color;
-    roundRect(ctx, x, cy, cellSize, cellSize, 3);
+    roundRect(ctx, x, sqY, cellSize, cellSize, Math.max(3, cellSize * 0.18));
     ctx.fill();
+
+    // date + day labels
+    ctx.fillStyle = COLORS.text;
+    ctx.font = `600 ${Math.min(14, Math.max(9, cellSize * 0.42))}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(String(d.getDate()), x + cellSize / 2, sqY + cellSize + dateH);
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = `500 ${Math.min(12, Math.max(8, cellSize * 0.36))}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.fillText(DOW[d.getDay()], x + cellSize / 2, sqY + cellSize + dateH + dowH);
   }
 
   // Footer legend
@@ -190,12 +231,10 @@ export async function downloadSummaryJPG(args: ExportArgs) {
     ctx.fillText(label, x + 22, footY);
     x += ctx.measureText(label).width + 56;
   }
-  // logged-of-total bottom right
   ctx.textAlign = "right";
   ctx.fillStyle = COLORS.muted;
   ctx.fillText(`${logged}/${total} days logged`, W - M, footY);
 
-  // Download
   const blob: Blob = await new Promise((resolve, reject) => {
     canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.95);
   });
@@ -221,6 +260,4 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-// silence unused
-void addDays;
-void toISODate;
+void addDays; void toISODate;
