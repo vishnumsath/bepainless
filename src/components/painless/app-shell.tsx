@@ -1,6 +1,9 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Home, CalendarDays, BarChart3, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import iconAsset from "@/assets/painless-icon-192.png.asset.json";
+
+export const APP_ICON_URL = iconAsset.url;
 
 const items = [
   { to: "/today", label: "Today", icon: Home },
@@ -39,13 +42,12 @@ export function BottomNav() {
 export function AppShell({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-background text-foreground">
-      {title ? (
-        <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur" style={{ paddingTop: "env(safe-area-inset-top)" }}>
-          <div className="mx-auto flex h-14 max-w-md items-center px-4">
-            <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-          </div>
-        </header>
-      ) : null}
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="mx-auto flex h-14 max-w-md items-center gap-3 px-4">
+          <img src={APP_ICON_URL} alt="PainLess" className="h-8 w-8 rounded-lg" />
+          <h1 className="text-lg font-semibold tracking-tight">{title ?? "PainLess"}</h1>
+        </div>
+      </header>
       <main className="mx-auto w-full max-w-md flex-1 px-4 py-5">{children}</main>
       <BottomNav />
     </div>

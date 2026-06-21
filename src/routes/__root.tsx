@@ -7,12 +7,17 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
+import { registerServiceWorker } from "@/lib/sw-register";
+import { installOutboxDrainer, pendingCount } from "@/lib/outbox";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { get, set, del } from "idb-keyval";
 
 function NotFoundComponent() {
   return (
@@ -63,8 +68,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "PainLess — Headache Tracker" },
       { name: "twitter:description", content: "PainLess is a minimalist, private headache tracker. Log your day in seconds and share clean reports with your doctor." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6f8ee654-f579-4217-a9d8-4b503465010b" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6f8ee654-f579-4217-a9d8-4b503465010b" },
+      { property: "og:image", content: "/icon-512.png" },
+      { name: "twitter:image", content: "/icon-512.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -85,7 +90,6 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
         <script
-          // Apply saved theme before paint to avoid a flash
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem('painless-theme');var d=document.documentElement;if(t==='light'){d.classList.remove('dark')}else{d.classList.add('dark')}}catch(e){}`,
           }}
@@ -99,22 +103,60 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+const persister = typeof window !== "undefined"
+  ? createAsyncStoragePersister({
+      storage: {
+        getItem: (k: string) => get(k).then((v) => (v == null ? null : String(v))),
+        setItem: (k: string, v: string) => set(k, v),
+        removeItem: (k: string) => del(k),
+      },
+      key: "painless-rq-cache",
+      throttleTime: 1000,
+    })
+  : null;
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const [pending, setPending] = useState(0);
+
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
-    return () => data.subscription.unsubscribe();
+    registerServiceWorker();
+    installOutboxDrainer(() => {
+      queryClient.invalidateQueries({ queryKey: ["entries"] });
+      pendingCount().then(setPending);
+    });
+    pendingCount().then(setPending);
+    const id = setInterval(() => pendingCount().then(setPending), 5000);
+    return () => { data.subscription.unsubscribe(); clearInterval(id); };
   }, [router, queryClient]);
 
-  return (
-    <QueryClientProvider client={queryClient}>
+  const inner = (
+    <>
       <Outlet />
       <Toaster position="top-center" />
-    </QueryClientProvider>
+      {pending > 0 ? (
+        <div className="pointer-events-none fixed left-1/2 top-2 z-50 -translate-x-1/2 rounded-full bg-foreground/10 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur">
+          {pending} change{pending === 1 ? "" : "s"} pending sync
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (!persister) {
+    return <QueryClientProvider client={queryClient}>{inner}</QueryClientProvider>;
+  }
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 30, buster: "v1" }}
+    >
+      {inner}
+    </PersistQueryClientProvider>
   );
 }

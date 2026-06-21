@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/painless/app-shell";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { deleteEntry, getEntriesInRange, upsertEntry } from "@/lib/entries.functions";
+import { getEntriesInRange } from "@/lib/entries.functions";
+import { send } from "@/lib/outbox";
 import { addDays, endOfMonth, parseISODate, startOfMonth, toISODate, formatPretty } from "@/lib/painless-date";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -20,8 +20,6 @@ type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "mo
 
 function HistoryPage() {
   const qc = useQueryClient();
-  const upsert = useServerFn(upsertEntry);
-  const del = useServerFn(deleteEntry);
 
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const start = toISODate(startOfMonth(cursor));
@@ -39,13 +37,14 @@ function HistoryPage() {
   const openEntry = openDate ? map.get(openDate) ?? null : null;
 
   const saveMut = useMutation({
-    mutationFn: (vars: { date: string; has_headache: boolean; severity: Entry["severity"] }) =>
-      upsert({ data: vars }),
+    mutationFn: async (vars: { date: string; has_headache: boolean; severity: Entry["severity"] }) => {
+      await send({ kind: "upsert", date: vars.date, has_headache: vars.has_headache, severity: vars.severity });
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["entries"] }); setOpenDate(null); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
   });
   const delMut = useMutation({
-    mutationFn: (vars: { date: string }) => del({ data: vars }),
+    mutationFn: async (vars: { date: string }) => { await send({ kind: "deleteOne", date: vars.date }); },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["entries"] }); setOpenDate(null); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Delete failed"),
   });

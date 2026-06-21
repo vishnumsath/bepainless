@@ -1,5 +1,5 @@
-// In-app reminder scheduler. Web limitation: notifications fire only while the
-// app is open (or PWA installed and recently active). No lock-screen quick actions.
+// Daily reminder scheduling using ServiceWorker showNotification (supports action buttons).
+import { swReady } from "./sw-register";
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -9,6 +9,11 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   if (Notification.permission === "denied") return false;
   const res = await Notification.requestPermission();
   return res === "granted";
+}
+
+export function notificationsEnabled(): boolean {
+  if (typeof window === "undefined" || !("Notification" in window)) return false;
+  return Notification.permission === "granted";
 }
 
 export function clearReminder() {
@@ -24,22 +29,25 @@ function msUntilNext(hhmm: string): number {
   return next.getTime() - now.getTime();
 }
 
+async function fire() {
+  if (typeof window === "undefined") return;
+  if (Notification.permission !== "granted") return;
+  const reg = await swReady();
+  if (reg) {
+    reg.active?.postMessage({ type: "show-reminder" });
+  } else {
+    // Fallback (no SW): basic notification, no action buttons
+    try { new Notification("PainLess check-in", { body: "Did you have a headache today?", icon: "/icon-192.png", tag: "painless-daily" }); } catch { /* ignore */ }
+  }
+}
+
 export function scheduleReminder(hhmm: string) {
   if (typeof window === "undefined") return;
   clearReminder();
   if (!/^\d{2}:\d{2}$/.test(hhmm)) return;
   const tick = async () => {
-    try {
-      if (Notification.permission === "granted") {
-        const n = new Notification("PainLess check-in", {
-          body: "Did you have a headache today?",
-          icon: "/icon-192.png",
-          tag: "painless-daily",
-        });
-        n.onclick = () => { window.focus(); window.location.assign("/today"); n.close(); };
-      }
-    } catch { /* ignore */ }
-    timer = setTimeout(tick, 24 * 60 * 60 * 1000); // schedule next day
+    await fire();
+    timer = setTimeout(tick, 24 * 60 * 60 * 1000);
   };
   timer = setTimeout(tick, msUntilNext(hhmm));
 }
