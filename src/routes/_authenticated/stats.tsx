@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AlertCircle, Download } from "lucide-react";
@@ -8,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { bulkMarkNoHeadache, getEntriesInRange } from "@/lib/entries.functions";
+import { getEntriesInRange } from "@/lib/entries.functions";
+import { send } from "@/lib/outbox";
 import { getProfile } from "@/lib/profile.functions";
 import { downloadSummaryJPG } from "@/lib/export-jpg";
 import { addDays, eachDayISO, parseISODate, toISODate } from "@/lib/painless-date";
@@ -25,7 +25,6 @@ type RangeKey = "7" | "30" | "custom";
 
 function StatsPage() {
   const qc = useQueryClient();
-  const bulk = useServerFn(bulkMarkNoHeadache);
 
   const [rangeKey, setRangeKey] = useState<RangeKey>("7");
   const [custom, setCustom] = useState<{ from?: Date; to?: Date }>({});
@@ -64,7 +63,7 @@ function StatsPage() {
   }, [entries, start, end]);
 
   const bulkMut = useMutation({
-    mutationFn: (dates: string[]) => bulk({ data: { dates } }),
+    mutationFn: async (dates: string[]) => { await send({ kind: "bulkNo", dates }); },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["entries"] }); toast.success("Filled in missing days."); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Bulk insert failed"),
   });

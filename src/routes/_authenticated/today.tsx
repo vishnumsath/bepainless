@@ -1,19 +1,23 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient, queryOptions } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
+import { z } from "zod";
 import { AppShell } from "@/components/painless/app-shell";
 import { Button } from "@/components/ui/button";
-import { getEntriesInRange, upsertEntry } from "@/lib/entries.functions";
+import { getEntriesInRange } from "@/lib/entries.functions";
+import { send } from "@/lib/outbox";
 import { todayISO } from "@/lib/painless-date";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+const searchSchema = z.object({
+  action: z.enum(["headache", "nopain"]).optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/today")({
-  head: () => ({
-    meta: [{ title: "Today — PainLess" }],
-  }),
+  head: () => ({ meta: [{ title: "Today — PainLess" }] }),
+  validateSearch: (s) => searchSchema.parse(s),
   component: TodayPage,
 });
 
@@ -25,9 +29,9 @@ const todayQuery = (date: string) =>
 
 function TodayPage() {
   const navigate = useNavigate();
+  const search = useSearch({ from: "/_authenticated/today" });
   const date = todayISO();
   const qc = useQueryClient();
-  const upsert = useServerFn(upsertEntry);
 
   const { data, isLoading } = useQuery(todayQuery(date));
   const todayEntry = data?.[0];
@@ -36,8 +40,10 @@ function TodayPage() {
   const [justSaved, setJustSaved] = useState<null | "no" | "mild" | "moderate" | "severe">(null);
 
   const saving = useMutation({
-    mutationFn: (vars: { has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }) =>
-      upsert({ data: { date, ...vars } }),
+    mutationFn: async (vars: { has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }) => {
+      await send({ kind: "upsert", date, has_headache: vars.has_headache, severity: vars.severity });
+      return vars;
+    },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["entries"] });
       setJustSaved(vars.has_headache ? (vars.severity as "mild") : "no");
@@ -45,6 +51,21 @@ function TodayPage() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
   });
+
+  // Handle deep-link from notification actions
+  const handled = useRef(false);
+  useEffect(() => {
+    if (handled.current) return;
+    if (search.action === "nopain") {
+      handled.current = true;
+      saving.mutate({ has_headache: false, severity: null });
+      navigate({ to: "/today", search: {}, replace: true });
+    } else if (search.action === "headache") {
+      handled.current = true;
+      setStep("severity");
+      navigate({ to: "/today", search: {}, replace: true });
+    }
+  }, [search.action, navigate, saving]);
 
   const logged = !!todayEntry || justSaved !== null;
 
@@ -88,23 +109,8 @@ function AskPrompt({ onYes, onNo, disabled }: { onYes: () => void; onNo: () => v
         Did you have a<br />headache today?
       </h2>
       <div className="mt-12 grid grid-cols-2 gap-4">
-        <Button
-          size="lg"
-          variant="outline"
-          disabled={disabled}
-          onClick={onNo}
-          className="h-28 rounded-2xl border-2 text-xl font-semibold"
-        >
-          No
-        </Button>
-        <Button
-          size="lg"
-          disabled={disabled}
-          onClick={onYes}
-          className="h-28 rounded-2xl text-xl font-semibold"
-        >
-          Yes
-        </Button>
+        <Button size="lg" variant="outline" disabled={disabled} onClick={onNo} className="h-28 rounded-2xl border-2 text-xl font-semibold">No</Button>
+        <Button size="lg" disabled={disabled} onClick={onYes} className="h-28 rounded-2xl text-xl font-semibold">Yes</Button>
       </div>
     </div>
   );
@@ -122,23 +128,13 @@ function SeverityPicker({ onPick, onBack, disabled }: { onPick: (s: "mild" | "mo
       <h2 className="text-2xl font-semibold tracking-tight">How severe was it?</h2>
       <div className="mt-8 flex flex-col gap-3">
         {SEVERITY.map((s) => (
-          <button
-            key={s.key}
-            disabled={disabled}
-            onClick={() => onPick(s.key)}
-            className={cn(
-              "h-20 rounded-2xl text-xl font-semibold transition-transform active:scale-[0.98]",
-              s.bg,
-              disabled && "opacity-60",
-            )}
-          >
+          <button key={s.key} disabled={disabled} onClick={() => onPick(s.key)}
+            className={cn("h-20 rounded-2xl text-xl font-semibold transition-transform active:scale-[0.98]", s.bg, disabled && "opacity-60")}>
             {s.label}
           </button>
         ))}
       </div>
-      <button onClick={onBack} className="mt-6 text-sm text-muted-foreground hover:text-foreground">
-        ← Back
-      </button>
+      <button onClick={onBack} className="mt-6 text-sm text-muted-foreground hover:text-foreground">← Back</button>
     </div>
   );
 }
@@ -147,10 +143,8 @@ function LoggedState({ entry, onYesAgain, onChange }: { entry: { has_headache: b
   const label = entry.has_headache ? `Logged — ${entry.severity ?? "headache"}` : "Logged — pain-free";
   const tone = !entry.has_headache
     ? "bg-painfree text-painfree-foreground"
-    : entry.severity === "mild"
-      ? "bg-mild text-mild-foreground"
-      : entry.severity === "moderate"
-        ? "bg-moderate text-moderate-foreground"
+    : entry.severity === "mild" ? "bg-mild text-mild-foreground"
+      : entry.severity === "moderate" ? "bg-moderate text-moderate-foreground"
         : "bg-severe text-severe-foreground";
   return (
     <div className="animate-slide-up flex w-full flex-col items-center">
@@ -160,12 +154,8 @@ function LoggedState({ entry, onYesAgain, onChange }: { entry: { has_headache: b
       <p className="mt-6 text-xl font-semibold capitalize">{label}</p>
       <p className="mt-1 text-sm text-muted-foreground">See you tomorrow.</p>
       <div className="mt-10 flex w-full flex-col gap-2">
-        <Button variant="outline" className="h-12" onClick={onYesAgain}>
-          Change today's entry
-        </Button>
-        <Button variant="ghost" className="h-12" onClick={onChange}>
-          View history
-        </Button>
+        <Button variant="outline" className="h-12" onClick={onYesAgain}>Change today's entry</Button>
+        <Button variant="ghost" className="h-12" onClick={onChange}>View history</Button>
       </div>
     </div>
   );
