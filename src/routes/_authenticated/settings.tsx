@@ -17,7 +17,7 @@ import { getProfile, upsertProfile } from "@/lib/profile.functions";
 import { getAllEntries } from "@/lib/entries.functions";
 import { send } from "@/lib/outbox";
 import { supabase } from "@/integrations/supabase/client";
-import { scheduleReminder, clearReminder, ensureNotificationPermission, notificationsEnabled } from "@/lib/reminders";
+import { scheduleReminder, disableReminder, ensureNotificationPermission, notificationsEnabled, testReminder, getReminderTime } from "@/lib/reminders";
 import { addDays, toISODate } from "@/lib/painless-date";
 import { toast } from "sonner";
 
@@ -47,7 +47,7 @@ function SettingsPage() {
     setName(profile.name ?? "");
     setAge(profile.age != null ? String(profile.age) : "");
     setGender(profile.gender ?? "");
-    setReminder(profile.reminder_time ?? "");
+    setReminder(profile.reminder_time ?? getReminderTime() ?? "");
     setTheme((profile.theme as "light" | "dark") ?? "dark");
   }, [profile]);
 
@@ -59,10 +59,11 @@ function SettingsPage() {
     try { localStorage.setItem("painless-theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
+  // Schedule (persisted) when enabled + time set. Do NOT clear on unmount —
+  // the reminder must survive page navigation.
   useEffect(() => {
-    if (!reminder || !notifOn) { clearReminder(); return; }
+    if (!notifOn || !reminder) return;
     scheduleReminder(reminder);
-    return () => clearReminder();
   }, [reminder, notifOn]);
 
   const saveMut = useMutation({
@@ -84,9 +85,35 @@ function SettingsPage() {
       const ok = await ensureNotificationPermission();
       if (!ok) { toast.error("Notification permission denied"); return; }
       setNotifOn(true);
+      if (reminder) scheduleReminder(reminder);
     } else {
       setNotifOn(false);
-      clearReminder();
+      disableReminder();
+    }
+  }
+
+  async function handleTestNotification() {
+    const ok = await testReminder();
+    if (!ok) toast.error("Enable notifications first");
+  }
+
+  // ---- Change password ----
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  async function handleChangePassword() {
+    if (pw1.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+    if (pw1 !== pw2) { toast.error("Passwords don't match"); return; }
+    setPwBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      toast.success("Password updated");
+      setPw1(""); setPw2("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update password");
+    } finally {
+      setPwBusy(false);
     }
   }
 
