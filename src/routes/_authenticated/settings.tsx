@@ -238,9 +238,29 @@ function SettingsPage() {
             <Label htmlFor="reminder">Daily check-in time</Label>
             <Input id="reminder" type="time" value={reminder} onChange={(e) => setReminder(e.target.value)} disabled={!notifOn} />
           </div>
+          <Button variant="outline" size="sm" className="w-full" onClick={handleTestNotification} disabled={!notifOn}>
+            Send test notification
+          </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             Notifications include quick actions to log "Headache" or "No Headache". Reminders fire while PainLess is open or recently active — install to your home screen for best results.
           </p>
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Security</h2>
+        <Card className="space-y-3 p-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="pw1">New password</Label>
+            <Input id="pw1" type="password" minLength={6} value={pw1} onChange={(e) => setPw1(e.target.value)} autoComplete="new-password" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pw2">Confirm new password</Label>
+            <Input id="pw2" type="password" minLength={6} value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" />
+          </div>
+          <Button variant="outline" className="h-11 w-full" disabled={pwBusy || !pw1 || !pw2} onClick={handleChangePassword}>
+            Change password
+          </Button>
         </Card>
       </section>
 
