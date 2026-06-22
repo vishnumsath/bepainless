@@ -1,10 +1,12 @@
 // PainLess Service Worker
-// - App-shell offline cache (network-first navigations, cache-first assets)
-// - Notification actions ("Log Headache" / "No Headache") that open the app pre-filled
-// - Background "sync" message channel: app posts {type:'drain-outbox'} when online
+// - Offline app-shell (network-first navigation, cache-first hashed assets)
+// - Notification actions ("Log Headache" / "No Headache")
+// - Bridges Background Sync events to open tabs
 
-const VERSION = 'painless-v3';
-const SHELL = ['/', '/today', '/history', '/stats', '/settings', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const VERSION = 'painless-v5';
+// Precache only PUBLIC URLs. Protected routes redirect to /auth when fetched
+// without a session and would poison the cache.
+const SHELL = ['/', '/auth', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -27,26 +29,24 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  // Never cache OAuth or server-fn endpoints
   if (url.pathname.startsWith('/~oauth') || url.pathname.startsWith('/_serverFn') || url.pathname.startsWith('/_server')) return;
 
-  // Navigation requests → network-first, fall back to cached shell
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
         const fresh = await fetch(req);
         const cache = await caches.open(VERSION);
-        cache.put(req, fresh.clone()).catch(() => {});
+        // Only cache successful, non-redirected responses
+        if (fresh.ok && !fresh.redirected) cache.put(req, fresh.clone()).catch(() => {});
         return fresh;
       } catch {
         const cache = await caches.open(VERSION);
-        return (await cache.match(req)) || (await cache.match('/')) || Response.error();
+        return (await cache.match(req)) || (await cache.match('/')) || (await cache.match('/auth')) || Response.error();
       }
     })());
     return;
   }
 
-  // Hashed assets → cache-first
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/_build/') || /\.(?:js|css|woff2?|png|jpg|jpeg|svg|webp|ico)$/.test(url.pathname)) {
     event.respondWith((async () => {
       const cache = await caches.open(VERSION);
@@ -54,7 +54,7 @@ self.addEventListener('fetch', (event) => {
       if (hit) return hit;
       try {
         const fresh = await fetch(req);
-        cache.put(req, fresh.clone()).catch(() => {});
+        if (fresh.ok) cache.put(req, fresh.clone()).catch(() => {});
         return fresh;
       } catch {
         return hit || Response.error();
@@ -63,7 +63,6 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// ---- Reminders & actions ----
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'show-reminder') {
@@ -95,7 +94,7 @@ self.addEventListener('notificationclick', (event) => {
     for (const c of all) {
       if ('focus' in c) {
         await c.focus();
-        await c.navigate(new URL(target, self.location.origin).href).catch(() => {});
+        try { await c.navigate(new URL(target, self.location.origin).href); } catch {}
         return;
       }
     }
@@ -103,7 +102,6 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 
-// Background Sync API (best-effort; supported only in some browsers)
 self.addEventListener('sync', (event) => {
   if (event.tag === 'painless-outbox') {
     event.waitUntil((async () => {
