@@ -80,6 +80,7 @@ function HistoryPage() {
           if (!iso) return <div key={i} className="aspect-square" />;
           const e = map.get(iso);
           const isToday = iso === todayIso;
+          const isFuture = iso > todayIso;
           const dot = !e
             ? "bg-muted"
             : !e.has_headache
@@ -92,14 +93,17 @@ function HistoryPage() {
           return (
             <button
               key={iso}
-              onClick={() => setOpenDate(iso)}
+              onClick={() => !isFuture && setOpenDate(iso)}
+              disabled={isFuture}
+              aria-disabled={isFuture}
               className={cn(
                 "group flex aspect-square flex-col items-center justify-center rounded-xl transition-colors",
-                isToday ? "ring-1 ring-foreground/40" : "hover:bg-accent",
+                isToday ? "ring-1 ring-foreground/40" : !isFuture && "hover:bg-accent",
+                isFuture && "cursor-not-allowed opacity-30",
               )}
             >
               <span className="text-sm">{parseISODate(iso).getDate()}</span>
-              <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", dot)} />
+              <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", isFuture ? "bg-transparent" : dot)} />
             </button>
           );
         })}

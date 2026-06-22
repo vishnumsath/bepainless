@@ -17,7 +17,7 @@ import { getProfile, upsertProfile } from "@/lib/profile.functions";
 import { getAllEntries } from "@/lib/entries.functions";
 import { send } from "@/lib/outbox";
 import { supabase } from "@/integrations/supabase/client";
-import { scheduleReminder, clearReminder, ensureNotificationPermission, notificationsEnabled } from "@/lib/reminders";
+import { scheduleReminder, disableReminder, ensureNotificationPermission, notificationsEnabled, testReminder, getReminderTime } from "@/lib/reminders";
 import { addDays, toISODate } from "@/lib/painless-date";
 import { toast } from "sonner";
 
@@ -47,7 +47,7 @@ function SettingsPage() {
     setName(profile.name ?? "");
     setAge(profile.age != null ? String(profile.age) : "");
     setGender(profile.gender ?? "");
-    setReminder(profile.reminder_time ?? "");
+    setReminder(profile.reminder_time ?? getReminderTime() ?? "");
     setTheme((profile.theme as "light" | "dark") ?? "dark");
   }, [profile]);
 
@@ -59,10 +59,11 @@ function SettingsPage() {
     try { localStorage.setItem("painless-theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
+  // Schedule (persisted) when enabled + time set. Do NOT clear on unmount —
+  // the reminder must survive page navigation.
   useEffect(() => {
-    if (!reminder || !notifOn) { clearReminder(); return; }
+    if (!notifOn || !reminder) return;
     scheduleReminder(reminder);
-    return () => clearReminder();
   }, [reminder, notifOn]);
 
   const saveMut = useMutation({
@@ -84,9 +85,35 @@ function SettingsPage() {
       const ok = await ensureNotificationPermission();
       if (!ok) { toast.error("Notification permission denied"); return; }
       setNotifOn(true);
+      if (reminder) scheduleReminder(reminder);
     } else {
       setNotifOn(false);
-      clearReminder();
+      disableReminder();
+    }
+  }
+
+  async function handleTestNotification() {
+    const ok = await testReminder();
+    if (!ok) toast.error("Enable notifications first");
+  }
+
+  // ---- Change password ----
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  async function handleChangePassword() {
+    if (pw1.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+    if (pw1 !== pw2) { toast.error("Passwords don't match"); return; }
+    setPwBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      toast.success("Password updated");
+      setPw1(""); setPw2("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update password");
+    } finally {
+      setPwBusy(false);
     }
   }
 
@@ -211,9 +238,29 @@ function SettingsPage() {
             <Label htmlFor="reminder">Daily check-in time</Label>
             <Input id="reminder" type="time" value={reminder} onChange={(e) => setReminder(e.target.value)} disabled={!notifOn} />
           </div>
+          <Button variant="outline" size="sm" className="w-full" onClick={handleTestNotification} disabled={!notifOn}>
+            Send test notification
+          </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             Notifications include quick actions to log "Headache" or "No Headache". Reminders fire while PainLess is open or recently active — install to your home screen for best results.
           </p>
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Security</h2>
+        <Card className="space-y-3 p-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="pw1">New password</Label>
+            <Input id="pw1" type="password" minLength={6} value={pw1} onChange={(e) => setPw1(e.target.value)} autoComplete="new-password" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pw2">Confirm new password</Label>
+            <Input id="pw2" type="password" minLength={6} value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" />
+          </div>
+          <Button variant="outline" className="h-11 w-full" disabled={pwBusy || !pw1 || !pw2} onClick={handleChangePassword}>
+            Change password
+          </Button>
         </Card>
       </section>
 

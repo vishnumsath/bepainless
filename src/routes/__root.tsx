@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { registerServiceWorker } from "@/lib/sw-register";
 import { installOutboxDrainer, pendingCount } from "@/lib/outbox";
+import { initReminderFromStorage } from "@/lib/reminders";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { get, set, del } from "idb-keyval";
@@ -127,6 +128,7 @@ function RootComponent() {
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
     registerServiceWorker();
+    initReminderFromStorage();
     installOutboxDrainer(() => {
       queryClient.invalidateQueries({ queryKey: ["entries"] });
       pendingCount().then(setPending);
