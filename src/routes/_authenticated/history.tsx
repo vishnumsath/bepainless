@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { z } from "zod";
 import { AppShell } from "@/components/painless/app-shell";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -11,17 +12,24 @@ import { addDays, endOfMonth, parseISODate, startOfMonth, toISODate, formatPrett
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+const searchSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+
 export const Route = createFileRoute("/_authenticated/history")({
   head: () => ({ meta: [{ title: "History — PainLess" }] }),
+  validateSearch: (s) => searchSchema.parse(s),
   component: HistoryPage,
 });
 
-type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null };
+type Severity = "mild" | "moderate" | "severe";
+type Entry = { entry_date: string; has_headache: boolean; severity: Severity | null; acute_med: boolean | null };
 
 function HistoryPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const search = Route.useSearch();
 
-  const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
+  const initialCursor = search.date ? startOfMonth(parseISODate(search.date)) : startOfMonth(new Date());
+  const [cursor, setCursor] = useState<Date>(initialCursor);
   const start = toISODate(startOfMonth(cursor));
   const end = toISODate(endOfMonth(cursor));
 
@@ -36,9 +44,21 @@ function HistoryPage() {
   const [openDate, setOpenDate] = useState<string | null>(null);
   const openEntry = openDate ? map.get(openDate) ?? null : null;
 
+  // Open from ?date= search param
+  const handledDeep = useMemo(() => ({ done: false }), []);
+  useEffect(() => {
+    if (handledDeep.done) return;
+    if (search.date && search.date <= todayIso) {
+      handledDeep.done = true;
+      setCursor(startOfMonth(parseISODate(search.date)));
+      setOpenDate(search.date);
+      navigate({ to: "/history", search: {}, replace: true });
+    }
+  }, [search.date, todayIso, navigate, handledDeep]);
+
   const saveMut = useMutation({
-    mutationFn: async (vars: { date: string; has_headache: boolean; severity: Entry["severity"] }) => {
-      await send({ kind: "upsert", date: vars.date, has_headache: vars.has_headache, severity: vars.severity });
+    mutationFn: async (vars: { date: string; has_headache: boolean; severity: Severity | null; acute_med: boolean | null }) => {
+      await send({ kind: "upsert", date: vars.date, has_headache: vars.has_headache, severity: vars.severity, acute_med: vars.acute_med });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["entries"] }); setOpenDate(null); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
@@ -125,7 +145,7 @@ function HistoryPage() {
             <DayEditor
               entry={openEntry}
               busy={saveMut.isPending || delMut.isPending}
-              onSave={(has, sev) => saveMut.mutate({ date: openDate, has_headache: has, severity: sev })}
+              onSave={(has, sev, med) => saveMut.mutate({ date: openDate, has_headache: has, severity: sev, acute_med: med })}
               onDelete={() => delMut.mutate({ date: openDate })}
             />
           ) : null}
@@ -148,39 +168,88 @@ function DayEditor({
   entry, onSave, onDelete, busy,
 }: {
   entry: Entry | null;
-  onSave: (has: boolean, sev: "mild" | "moderate" | "severe" | null) => void;
+  onSave: (has: boolean, sev: Severity | null, med: boolean | null) => void;
   onDelete: () => void;
   busy: boolean;
 }) {
+  const [hasHeadache, setHasHeadache] = useState<boolean | null>(entry ? entry.has_headache : null);
+  const [severity, setSeverity] = useState<Severity | null>(entry?.severity ?? null);
+  const [acuteMed, setAcuteMed] = useState<boolean | null>(entry?.acute_med ?? null);
+
   return (
     <div className="pb-6 pt-2">
       <p className="mb-3 text-sm text-muted-foreground">Set this day's log:</p>
       <div className="grid grid-cols-2 gap-2">
-        <Button variant={entry && !entry.has_headache ? "default" : "outline"} className="h-14 rounded-xl" disabled={busy} onClick={() => onSave(false, null)}>
+        <Button
+          variant={hasHeadache === false ? "default" : "outline"}
+          className="h-14 rounded-xl"
+          disabled={busy}
+          onClick={() => { setHasHeadache(false); setSeverity(null); setAcuteMed(null); onSave(false, null, null); }}
+        >
           No headache
         </Button>
-        <Button variant="outline" className="h-14 rounded-xl" disabled={busy} onClick={() => onSave(true, entry?.severity ?? "mild")}>
+        <Button
+          variant={hasHeadache === true ? "default" : "outline"}
+          className="h-14 rounded-xl"
+          disabled={busy}
+          onClick={() => { setHasHeadache(true); if (!severity) setSeverity("mild"); }}
+        >
           Had headache
         </Button>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {(["mild", "moderate", "severe"] as const).map((s) => (
-          <button
-            key={s}
-            disabled={busy}
-            onClick={() => onSave(true, s)}
-            className={cn(
-              "h-14 rounded-xl text-sm font-semibold capitalize transition-transform active:scale-[0.98]",
-              s === "mild" && "bg-mild text-mild-foreground",
-              s === "moderate" && "bg-moderate text-moderate-foreground",
-              s === "severe" && "bg-severe text-severe-foreground",
-              entry?.has_headache && entry.severity === s && "ring-2 ring-foreground/60",
-            )}
+
+      {hasHeadache === true ? (
+        <>
+          <p className="mb-2 mt-4 text-xs uppercase tracking-wider text-muted-foreground">Severity</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["mild", "moderate", "severe"] as const).map((s) => (
+              <button
+                key={s}
+                disabled={busy}
+                onClick={() => setSeverity(s)}
+                className={cn(
+                  "h-14 rounded-xl text-sm font-semibold capitalize transition-transform active:scale-[0.98]",
+                  s === "mild" && "bg-mild text-mild-foreground",
+                  s === "moderate" && "bg-moderate text-moderate-foreground",
+                  s === "severe" && "bg-severe text-severe-foreground",
+                  severity === s && "ring-2 ring-foreground/60",
+                )}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          <p className="mb-2 mt-4 text-xs uppercase tracking-wider text-muted-foreground">Was acute medication needed?</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={acuteMed === false ? "default" : "outline"}
+              className="h-12 rounded-xl"
+              disabled={busy}
+              onClick={() => setAcuteMed(false)}
+            >
+              No
+            </Button>
+            <Button
+              variant={acuteMed === true ? "default" : "outline"}
+              className="h-12 rounded-xl"
+              disabled={busy}
+              onClick={() => setAcuteMed(true)}
+            >
+              Yes
+            </Button>
+          </div>
+
+          <Button
+            className="mt-4 h-12 w-full"
+            disabled={busy || !severity || acuteMed === null}
+            onClick={() => onSave(true, severity, acuteMed)}
           >
-            {s}
-          </button>
-        ))}
-      </div>
+            Save
+          </Button>
+        </>
+      ) : null}
+
       {entry ? (
         <Button variant="ghost" className="mt-4 w-full text-destructive hover:text-destructive" disabled={busy} onClick={onDelete}>
           <Trash2 className="mr-2 h-4 w-4" /> Delete entry
