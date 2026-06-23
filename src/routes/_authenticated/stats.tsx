@@ -158,6 +158,23 @@ function StatsPage() {
         <SeverityBar label="Severe" count={stats.severe} total={stats.headache} color="bg-severe" />
       </div>
 
+      <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        Acute Medication
+      </h3>
+      <Card className="mt-3 flex items-baseline justify-between p-4">
+        <div>
+          <div className="text-3xl font-bold tabular-nums">{stats.acuteMed}</div>
+          <div className="text-xs text-muted-foreground">day{stats.acuteMed === 1 ? "" : "s"} medicated</div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-semibold tabular-nums">
+            {stats.headache ? Math.round((stats.acuteMed / stats.headache) * 100) : 0}%
+          </div>
+          <div className="text-xs text-muted-foreground">of headache days</div>
+        </div>
+      </Card>
+
+
       <Button onClick={handleExport} className="mt-8 h-12 w-full text-base">
         <Download className="mr-2 h-5 w-5" /> Export Summary as JPG
       </Button>
