@@ -1,6 +1,6 @@
 import { addDays, eachDayISO, parseISODate, toISODate } from "./painless-date";
 
-type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null };
+type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med?: boolean | null };
 
 const COLORS = {
   bg: "#FFFFFF",
