@@ -59,7 +59,7 @@ async function enqueue(op: OutboxOp) {
 async function executeOp(op: OutboxOp): Promise<void> {
   switch (op.kind) {
     case "upsert":
-      await upsertEntry({ data: { date: op.date, has_headache: op.has_headache, severity: op.severity } });
+      await upsertEntry({ data: { date: op.date, has_headache: op.has_headache, severity: op.severity, acute_med: op.acute_med ?? null } });
       return;
     case "deleteOne":
       await deleteEntry({ data: { date: op.date } });
@@ -86,13 +86,16 @@ export async function send(op: OutboxOp): Promise<void> {
   if (online()) {
     try {
       await executeOp(op);
+      emitChange();
       return;
     } catch (_) {
       // fall through to queue
     }
   }
   await enqueue(op);
+  emitChange();
 }
+
 
 let draining = false;
 export async function drainOutbox(): Promise<{ drained: number; remaining: number }> {
