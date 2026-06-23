@@ -121,6 +121,7 @@ export async function drainOutbox(): Promise<{ drained: number; remaining: numbe
       }
     }
     const remaining = (await d.count(STORE));
+    if (drained > 0) emitChange();
     return { drained, remaining };
   } catch {
     return { drained: 0, remaining: 0 };
@@ -128,6 +129,7 @@ export async function drainOutbox(): Promise<{ drained: number; remaining: numbe
     draining = false;
   }
 }
+
 
 export async function pendingCount(): Promise<number> {
   try { return await (await db()).count(STORE); } catch { return 0; }
