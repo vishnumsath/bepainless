@@ -1,6 +1,6 @@
 import { addDays, eachDayISO, parseISODate, toISODate } from "./painless-date";
 
-type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null };
+type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med?: boolean | null };
 
 const COLORS = {
   bg: "#FFFFFF",
@@ -38,7 +38,7 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   const map = new Map(args.entries.map((e) => [e.entry_date, e]));
   const days = eachDayISO(parseISODate(args.start), parseISODate(args.end));
   const total = days.length;
-  let painfreeCount = 0, mild = 0, moderate = 0, severe = 0, headache = 0, unlogged = 0;
+  let painfreeCount = 0, mild = 0, moderate = 0, severe = 0, headache = 0, unlogged = 0, acuteMed = 0;
   for (const d of days) {
     const e = map.get(d);
     if (!e) { unlogged++; continue; }
@@ -48,9 +48,12 @@ export async function downloadSummaryJPG(args: ExportArgs) {
       if (e.severity === "mild") mild++;
       else if (e.severity === "moderate") moderate++;
       else if (e.severity === "severe") severe++;
+      if (e.acute_med) acuteMed++;
     }
   }
   const logged = total - unlogged;
+  const acuteMedPct = headache ? Math.round((acuteMed / headache) * 100) : 0;
+
 
   const M = 80;
   let y = M;
@@ -129,7 +132,20 @@ export async function downloadSummaryJPG(args: ExportArgs) {
     ctx.fillText(`${b.label}: ${pct}% (${b.count} day${b.count === 1 ? "" : "s"})`, M + 12, y + 25);
     y += 52;
   }
-  y += 20;
+  y += 12;
+
+  // Acute medication summary line
+  ctx.fillStyle = COLORS.text;
+  ctx.font = "700 22px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Acute Medication", M, y + 22);
+  ctx.font = "500 18px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillStyle = COLORS.muted;
+  ctx.textAlign = "right";
+  ctx.fillText(`${acuteMed} of ${headache} headache day${headache === 1 ? "" : "s"}  ·  ${acuteMedPct}%`, W - M, y + 22);
+  y += 50;
+
+
 
   // ---- Daily Pattern (with month label on first-of-month, date+day under each block) ----
   ctx.fillStyle = COLORS.text;

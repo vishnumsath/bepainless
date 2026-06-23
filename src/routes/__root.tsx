@@ -14,7 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { registerServiceWorker } from "@/lib/sw-register";
-import { installOutboxDrainer, pendingCount } from "@/lib/outbox";
+import { installOutboxDrainer, pendingCount, onOutboxChange } from "@/lib/outbox";
 import { initReminderFromStorage } from "@/lib/reminders";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
@@ -129,14 +129,17 @@ function RootComponent() {
     });
     registerServiceWorker();
     initReminderFromStorage();
+    const refresh = () => pendingCount().then(setPending);
     installOutboxDrainer(() => {
       queryClient.invalidateQueries({ queryKey: ["entries"] });
-      pendingCount().then(setPending);
+      refresh();
     });
-    pendingCount().then(setPending);
-    const id = setInterval(() => pendingCount().then(setPending), 5000);
-    return () => { data.subscription.unsubscribe(); clearInterval(id); };
+    const offChange = onOutboxChange(refresh);
+    refresh();
+    const id = setInterval(refresh, 5000);
+    return () => { data.subscription.unsubscribe(); clearInterval(id); offChange(); };
   }, [router, queryClient]);
+
 
   const inner = (
     <>

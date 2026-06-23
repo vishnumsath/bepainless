@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/stats")({
   component: StatsPage,
 });
 
-type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null };
+type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med: boolean | null };
 type RangeKey = "7" | "30" | "custom";
 
 function StatsPage() {
@@ -46,7 +46,7 @@ function StatsPage() {
   const stats = useMemo(() => {
     const all = eachDayISO(parseISODate(start), parseISODate(end));
     const m = new Map(entries.map((e) => [e.entry_date, e]));
-    let headache = 0, painfree = 0, mild = 0, moderate = 0, severe = 0;
+    let headache = 0, painfree = 0, mild = 0, moderate = 0, severe = 0, acuteMed = 0;
     const missing: string[] = [];
     for (const d of all) {
       const e = m.get(d);
@@ -57,10 +57,12 @@ function StatsPage() {
         if (e.severity === "mild") mild++;
         else if (e.severity === "moderate") moderate++;
         else if (e.severity === "severe") severe++;
+        if (e.acute_med) acuteMed++;
       }
     }
-    return { total: all.length, headache, painfree, mild, moderate, severe, missing };
+    return { total: all.length, headache, painfree, mild, moderate, severe, acuteMed, missing };
   }, [entries, start, end]);
+
 
   const bulkMut = useMutation({
     mutationFn: async (dates: string[]) => { await send({ kind: "bulkNo", dates }); },
@@ -155,6 +157,23 @@ function StatsPage() {
         <SeverityBar label="Moderate" count={stats.moderate} total={stats.headache} color="bg-moderate" />
         <SeverityBar label="Severe" count={stats.severe} total={stats.headache} color="bg-severe" />
       </div>
+
+      <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        Acute Medication
+      </h3>
+      <Card className="mt-3 flex items-baseline justify-between p-4">
+        <div>
+          <div className="text-3xl font-bold tabular-nums">{stats.acuteMed}</div>
+          <div className="text-xs text-muted-foreground">day{stats.acuteMed === 1 ? "" : "s"} medicated</div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-semibold tabular-nums">
+            {stats.headache ? Math.round((stats.acuteMed / stats.headache) * 100) : 0}%
+          </div>
+          <div className="text-xs text-muted-foreground">of headache days</div>
+        </div>
+      </Card>
+
 
       <Button onClick={handleExport} className="mt-8 h-12 w-full text-base">
         <Download className="mr-2 h-5 w-5" /> Export Summary as JPG

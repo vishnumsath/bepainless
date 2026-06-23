@@ -4,11 +4,24 @@ import { openDB, type IDBPDatabase } from "idb";
 import { upsertEntry, deleteEntry, bulkMarkNoHeadache, deleteEntriesInRange, importEntries } from "./entries.functions";
 
 export type OutboxOp =
-  | { kind: "upsert"; date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }
+  | { kind: "upsert"; date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med?: boolean | null }
   | { kind: "deleteOne"; date: string }
   | { kind: "bulkNo"; dates: string[] }
   | { kind: "deleteRange"; start: string | null; end: string | null }
-  | { kind: "import"; entries: Array<{ date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }> };
+  | { kind: "import"; entries: Array<{ date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med?: boolean | null }> };
+
+const CHANGE_EVENT = "painless-outbox-change";
+function emitChange() {
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new CustomEvent(CHANGE_EVENT)); } catch { /* ignore */ }
+  }
+}
+export function onOutboxChange(handler: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CHANGE_EVENT, handler);
+}
+
 
 interface QueuedItem { id?: number; op: OutboxOp; ts: number; tries: number }
 
@@ -46,7 +59,7 @@ async function enqueue(op: OutboxOp) {
 async function executeOp(op: OutboxOp): Promise<void> {
   switch (op.kind) {
     case "upsert":
-      await upsertEntry({ data: { date: op.date, has_headache: op.has_headache, severity: op.severity } });
+      await upsertEntry({ data: { date: op.date, has_headache: op.has_headache, severity: op.severity, acute_med: op.acute_med ?? null } });
       return;
     case "deleteOne":
       await deleteEntry({ data: { date: op.date } });
@@ -73,13 +86,16 @@ export async function send(op: OutboxOp): Promise<void> {
   if (online()) {
     try {
       await executeOp(op);
+      emitChange();
       return;
     } catch (_) {
       // fall through to queue
     }
   }
   await enqueue(op);
+  emitChange();
 }
+
 
 let draining = false;
 export async function drainOutbox(): Promise<{ drained: number; remaining: number }> {
@@ -105,6 +121,7 @@ export async function drainOutbox(): Promise<{ drained: number; remaining: numbe
       }
     }
     const remaining = (await d.count(STORE));
+    if (drained > 0) emitChange();
     return { drained, remaining };
   } catch {
     return { drained: 0, remaining: 0 };
@@ -112,6 +129,7 @@ export async function drainOutbox(): Promise<{ drained: number; remaining: numbe
     draining = false;
   }
 }
+
 
 export async function pendingCount(): Promise<number> {
   try { return await (await db()).count(STORE); } catch { return 0; }

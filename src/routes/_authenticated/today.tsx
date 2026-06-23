@@ -21,6 +21,8 @@ export const Route = createFileRoute("/_authenticated/today")({
   component: TodayPage,
 });
 
+type Severity = "mild" | "moderate" | "severe";
+
 const todayQuery = (date: string) =>
   queryOptions({
     queryKey: ["entries", date, date],
@@ -34,20 +36,24 @@ function TodayPage() {
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery(todayQuery(date));
-  const todayEntry = data?.[0];
+  const todayEntry = data?.[0] as
+    | { has_headache: boolean; severity: Severity | null; acute_med: boolean | null }
+    | undefined;
 
-  const [step, setStep] = useState<"ask" | "severity">("ask");
-  const [justSaved, setJustSaved] = useState<null | "no" | "mild" | "moderate" | "severe">(null);
+  const [step, setStep] = useState<"ask" | "severity" | "acuteMed">("ask");
+  const [pickedSeverity, setPickedSeverity] = useState<Severity | null>(null);
+  const [justSaved, setJustSaved] = useState<null | { has_headache: boolean; severity: Severity | null; acute_med: boolean | null }>(null);
 
   const saving = useMutation({
-    mutationFn: async (vars: { has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }) => {
-      await send({ kind: "upsert", date, has_headache: vars.has_headache, severity: vars.severity });
+    mutationFn: async (vars: { has_headache: boolean; severity: Severity | null; acute_med: boolean | null }) => {
+      await send({ kind: "upsert", date, has_headache: vars.has_headache, severity: vars.severity, acute_med: vars.acute_med });
       return vars;
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["entries"] });
-      setJustSaved(vars.has_headache ? (vars.severity as "mild") : "no");
+      setJustSaved(vars);
       setStep("ask");
+      setPickedSeverity(null);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
   });
@@ -58,7 +64,7 @@ function TodayPage() {
     if (handled.current) return;
     if (search.action === "nopain") {
       handled.current = true;
-      saving.mutate({ has_headache: false, severity: null });
+      saving.mutate({ has_headache: false, severity: null, acute_med: null });
       navigate({ to: "/today", search: {}, replace: true });
     } else if (search.action === "headache") {
       handled.current = true;
@@ -80,20 +86,25 @@ function TodayPage() {
           <div className="mt-10 h-32 w-32 animate-pulse rounded-full bg-muted" />
         ) : logged && step === "ask" ? (
           <LoggedState
-            entry={todayEntry ?? { has_headache: justSaved !== "no", severity: justSaved === "no" ? null : (justSaved as "mild" | "moderate" | "severe") }}
-            onChange={() => { setJustSaved(null); setStep("ask"); qc.invalidateQueries({ queryKey: ["entries"] }); navigate({ to: "/history" }); }}
-            onYesAgain={() => setStep("severity")}
+            entry={todayEntry ?? justSaved!}
+            onEdit={() => navigate({ to: "/history", search: { date } })}
           />
         ) : step === "severity" ? (
           <SeverityPicker
             disabled={saving.isPending}
-            onPick={(sev) => saving.mutate({ has_headache: true, severity: sev })}
+            onPick={(sev) => { setPickedSeverity(sev); setStep("acuteMed"); }}
             onBack={() => setStep("ask")}
+          />
+        ) : step === "acuteMed" ? (
+          <AcuteMedPicker
+            disabled={saving.isPending}
+            onPick={(med) => saving.mutate({ has_headache: true, severity: pickedSeverity, acute_med: med })}
+            onBack={() => setStep("severity")}
           />
         ) : (
           <AskPrompt
             disabled={saving.isPending}
-            onNo={() => saving.mutate({ has_headache: false, severity: null })}
+            onNo={() => saving.mutate({ has_headache: false, severity: null, acute_med: null })}
             onYes={() => setStep("severity")}
           />
         )}
@@ -122,7 +133,7 @@ const SEVERITY = [
   { key: "severe", label: "Severe", bg: "bg-severe text-severe-foreground" },
 ] as const;
 
-function SeverityPicker({ onPick, onBack, disabled }: { onPick: (s: "mild" | "moderate" | "severe") => void; onBack: () => void; disabled: boolean }) {
+function SeverityPicker({ onPick, onBack, disabled }: { onPick: (s: Severity) => void; onBack: () => void; disabled: boolean }) {
   return (
     <div className="animate-slide-up w-full">
       <h2 className="text-2xl font-semibold tracking-tight">How severe was it?</h2>
@@ -139,7 +150,20 @@ function SeverityPicker({ onPick, onBack, disabled }: { onPick: (s: "mild" | "mo
   );
 }
 
-function LoggedState({ entry, onYesAgain, onChange }: { entry: { has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }; onYesAgain: () => void; onChange: () => void }) {
+function AcuteMedPicker({ onPick, onBack, disabled }: { onPick: (med: boolean) => void; onBack: () => void; disabled: boolean }) {
+  return (
+    <div className="animate-slide-up w-full">
+      <h2 className="text-2xl font-semibold leading-snug tracking-tight">Was acute medication needed?</h2>
+      <div className="mt-10 grid grid-cols-2 gap-4">
+        <Button size="lg" variant="outline" disabled={disabled} onClick={() => onPick(false)} className="h-24 rounded-2xl border-2 text-xl font-semibold">No</Button>
+        <Button size="lg" disabled={disabled} onClick={() => onPick(true)} className="h-24 rounded-2xl text-xl font-semibold">Yes</Button>
+      </div>
+      <button onClick={onBack} className="mt-6 text-sm text-muted-foreground hover:text-foreground">← Back</button>
+    </div>
+  );
+}
+
+function LoggedState({ entry, onEdit }: { entry: { has_headache: boolean; severity: Severity | null; acute_med: boolean | null }; onEdit: () => void }) {
   const label = entry.has_headache ? `Logged — ${entry.severity ?? "headache"}` : "Logged — pain-free";
   const tone = !entry.has_headache
     ? "bg-painfree text-painfree-foreground"
@@ -152,10 +176,13 @@ function LoggedState({ entry, onYesAgain, onChange }: { entry: { has_headache: b
         <Check className="h-16 w-16" strokeWidth={3} />
       </div>
       <p className="mt-6 text-xl font-semibold capitalize">{label}</p>
-      <p className="mt-1 text-sm text-muted-foreground">See you tomorrow.</p>
+      {entry.has_headache && entry.acute_med != null ? (
+        <p className="mt-1 text-sm text-muted-foreground">Acute medication: {entry.acute_med ? "Yes" : "No"}</p>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">See you tomorrow.</p>
+      )}
       <div className="mt-10 flex w-full flex-col gap-2">
-        <Button variant="outline" className="h-12" onClick={onYesAgain}>Change today's entry</Button>
-        <Button variant="ghost" className="h-12" onClick={onChange}>View history</Button>
+        <Button variant="outline" className="h-12" onClick={onEdit}>Change today's entry</Button>
       </div>
     </div>
   );

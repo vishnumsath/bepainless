@@ -8,7 +8,12 @@ const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 export const upsertEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ date: dateStr, has_headache: z.boolean(), severity: severityEnum.nullable() }).parse(d),
+    z.object({
+      date: dateStr,
+      has_headache: z.boolean(),
+      severity: severityEnum.nullable(),
+      acute_med: z.boolean().nullable().optional(),
+    }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const row = {
@@ -16,6 +21,7 @@ export const upsertEntry = createServerFn({ method: "POST" })
       entry_date: data.date,
       has_headache: data.has_headache,
       severity: data.has_headache ? data.severity : null,
+      acute_med: data.has_headache ? (data.acute_med ?? null) : null,
     };
     const { error } = await context.supabase
       .from("log_entries")
@@ -23,6 +29,7 @@ export const upsertEntry = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
 
 export const deleteEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -43,7 +50,7 @@ export const getEntriesInRange = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { data: rows, error } = await context.supabase
       .from("log_entries")
-      .select("entry_date, has_headache, severity")
+      .select("entry_date, has_headache, severity, acute_med")
       .eq("user_id", context.userId)
       .gte("entry_date", data.start)
       .lte("entry_date", data.end)
@@ -57,12 +64,13 @@ export const getAllEntries = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data: rows, error } = await context.supabase
       .from("log_entries")
-      .select("entry_date, has_headache, severity")
+      .select("entry_date, has_headache, severity, acute_med")
       .eq("user_id", context.userId)
       .order("entry_date", { ascending: true });
     if (error) throw new Error(error.message);
     return rows ?? [];
   });
+
 
 export const bulkMarkNoHeadache = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -98,6 +106,7 @@ export const importEntries = createServerFn({ method: "POST" })
     z.object({
       entries: z.array(z.object({
         date: dateStr, has_headache: z.boolean(), severity: severityEnum.nullable(),
+        acute_med: z.boolean().nullable().optional(),
       })).min(1).max(5000),
     }).parse(d),
   )
@@ -107,7 +116,9 @@ export const importEntries = createServerFn({ method: "POST" })
       entry_date: e.date,
       has_headache: e.has_headache,
       severity: e.has_headache ? e.severity : null,
+      acute_med: e.has_headache ? (e.acute_med ?? null) : null,
     }));
+
     // Chunk to be safe with row limits
     const CHUNK = 500;
     for (let i = 0; i < rows.length; i += CHUNK) {
