@@ -4,11 +4,24 @@ import { openDB, type IDBPDatabase } from "idb";
 import { upsertEntry, deleteEntry, bulkMarkNoHeadache, deleteEntriesInRange, importEntries } from "./entries.functions";
 
 export type OutboxOp =
-  | { kind: "upsert"; date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }
+  | { kind: "upsert"; date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med?: boolean | null }
   | { kind: "deleteOne"; date: string }
   | { kind: "bulkNo"; dates: string[] }
   | { kind: "deleteRange"; start: string | null; end: string | null }
-  | { kind: "import"; entries: Array<{ date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null }> };
+  | { kind: "import"; entries: Array<{ date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med?: boolean | null }> };
+
+const CHANGE_EVENT = "painless-outbox-change";
+function emitChange() {
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new CustomEvent(CHANGE_EVENT)); } catch { /* ignore */ }
+  }
+}
+export function onOutboxChange(handler: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CHANGE_EVENT, handler);
+}
+
 
 interface QueuedItem { id?: number; op: OutboxOp; ts: number; tries: number }
 
