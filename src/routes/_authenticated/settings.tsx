@@ -263,8 +263,12 @@ function SettingsPage() {
               </Select>
             </div>
           </div>
+          <Button onClick={() => saveProfileMut.mutate()} disabled={saveProfileMut.isPending} className="mt-2 h-11 w-full">
+            Save profile
+          </Button>
         </Card>
       </section>
+
 
       <section className="mt-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Reminders</h2>
