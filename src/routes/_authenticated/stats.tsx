@@ -46,7 +46,7 @@ function StatsPage() {
   const stats = useMemo(() => {
     const all = eachDayISO(parseISODate(start), parseISODate(end));
     const m = new Map(entries.map((e) => [e.entry_date, e]));
-    let headache = 0, painfree = 0, mild = 0, moderate = 0, severe = 0;
+    let headache = 0, painfree = 0, mild = 0, moderate = 0, severe = 0, acuteMed = 0;
     const missing: string[] = [];
     for (const d of all) {
       const e = m.get(d);
@@ -57,10 +57,12 @@ function StatsPage() {
         if (e.severity === "mild") mild++;
         else if (e.severity === "moderate") moderate++;
         else if (e.severity === "severe") severe++;
+        if (e.acute_med) acuteMed++;
       }
     }
-    return { total: all.length, headache, painfree, mild, moderate, severe, missing };
+    return { total: all.length, headache, painfree, mild, moderate, severe, acuteMed, missing };
   }, [entries, start, end]);
+
 
   const bulkMut = useMutation({
     mutationFn: async (dates: string[]) => { await send({ kind: "bulkNo", dates }); },
