@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/stats")({
   component: StatsPage,
 });
 
-type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null };
+type Entry = { entry_date: string; has_headache: boolean; severity: "mild" | "moderate" | "severe" | null; acute_med: boolean | null };
 type RangeKey = "7" | "30" | "custom";
 
 function StatsPage() {
