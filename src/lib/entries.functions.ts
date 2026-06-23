@@ -106,6 +106,7 @@ export const importEntries = createServerFn({ method: "POST" })
     z.object({
       entries: z.array(z.object({
         date: dateStr, has_headache: z.boolean(), severity: severityEnum.nullable(),
+        acute_med: z.boolean().nullable().optional(),
       })).min(1).max(5000),
     }).parse(d),
   )
@@ -115,7 +116,9 @@ export const importEntries = createServerFn({ method: "POST" })
       entry_date: e.date,
       has_headache: e.has_headache,
       severity: e.has_headache ? e.severity : null,
+      acute_med: e.has_headache ? (e.acute_med ?? null) : null,
     }));
+
     // Chunk to be safe with row limits
     const CHUNK = 500;
     for (let i = 0; i < rows.length; i += CHUNK) {
