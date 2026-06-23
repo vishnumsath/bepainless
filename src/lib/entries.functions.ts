@@ -50,7 +50,7 @@ export const getEntriesInRange = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { data: rows, error } = await context.supabase
       .from("log_entries")
-      .select("entry_date, has_headache, severity")
+      .select("entry_date, has_headache, severity, acute_med")
       .eq("user_id", context.userId)
       .gte("entry_date", data.start)
       .lte("entry_date", data.end)
@@ -64,12 +64,13 @@ export const getAllEntries = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data: rows, error } = await context.supabase
       .from("log_entries")
-      .select("entry_date, has_headache, severity")
+      .select("entry_date, has_headache, severity, acute_med")
       .eq("user_id", context.userId)
       .order("entry_date", { ascending: true });
     if (error) throw new Error(error.message);
     return rows ?? [];
   });
+
 
 export const bulkMarkNoHeadache = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
