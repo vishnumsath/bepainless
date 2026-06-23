@@ -353,13 +353,10 @@ function SettingsPage() {
         </Card>
       </section>
 
-      <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="mt-6 h-12 w-full">
-        Save changes
-      </Button>
-
-      <Button onClick={signOut} variant="ghost" className="mt-3 h-11 w-full text-muted-foreground">
+      <Button onClick={signOut} variant="ghost" className="mt-6 h-11 w-full text-muted-foreground">
         <LogOut className="mr-2 h-4 w-4" /> Sign out
       </Button>
+
 
       <p className="mt-6 text-center text-[11px] text-muted-foreground">PainLess · Your data stays private in your account.</p>
 
