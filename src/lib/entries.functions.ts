@@ -8,7 +8,12 @@ const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 export const upsertEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ date: dateStr, has_headache: z.boolean(), severity: severityEnum.nullable() }).parse(d),
+    z.object({
+      date: dateStr,
+      has_headache: z.boolean(),
+      severity: severityEnum.nullable(),
+      acute_med: z.boolean().nullable().optional(),
+    }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const row = {
@@ -16,6 +21,7 @@ export const upsertEntry = createServerFn({ method: "POST" })
       entry_date: data.date,
       has_headache: data.has_headache,
       severity: data.has_headache ? data.severity : null,
+      acute_med: data.has_headache ? (data.acute_med ?? null) : null,
     };
     const { error } = await context.supabase
       .from("log_entries")
@@ -23,6 +29,7 @@ export const upsertEntry = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
 
 export const deleteEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
