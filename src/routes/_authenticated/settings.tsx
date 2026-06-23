@@ -66,7 +66,48 @@ function SettingsPage() {
     scheduleReminder(reminder);
   }, [reminder, notifOn]);
 
-  const saveMut = useMutation({
+  // Instant-save: profile-only fields are saved by the explicit "Save" button.
+  // Theme / reminder time / notifications persist instantly here.
+  const saveInstant = useMutation({
+    mutationFn: (patch: { reminder_time?: string | null; theme?: "light" | "dark" }) =>
+      upsert({
+        data: {
+          name: name || null,
+          age: age ? Number(age) : null,
+          gender: gender || null,
+          reminder_time: patch.reminder_time !== undefined ? patch.reminder_time : (reminder || null),
+          theme: patch.theme ?? theme,
+        },
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profile"] }); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
+  });
+
+  // Persist theme changes instantly
+  const themeRef = useRef<"light" | "dark" | null>(null);
+  useEffect(() => {
+    if (!profile) return;
+    if (themeRef.current === null) { themeRef.current = theme; return; }
+    if (themeRef.current === theme) return;
+    themeRef.current = theme;
+    saveInstant.mutate({ theme });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
+
+  // Persist reminder time instantly (debounced)
+  const reminderRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!profile) return;
+    if (reminderRef.current === null) { reminderRef.current = reminder; return; }
+    if (reminderRef.current === reminder) return;
+    reminderRef.current = reminder;
+    const id = setTimeout(() => saveInstant.mutate({ reminder_time: reminder || null }), 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminder]);
+
+  // Profile (name/age/gender) — explicit save
+  const saveProfileMut = useMutation({
     mutationFn: () => upsert({
       data: {
         name: name || null,
@@ -76,7 +117,7 @@ function SettingsPage() {
         theme,
       },
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profile"] }); toast.success("Saved."); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profile"] }); toast.success("Profile saved."); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
   });
 
@@ -91,6 +132,7 @@ function SettingsPage() {
       disableReminder();
     }
   }
+
 
   async function handleTestNotification() {
     const ok = await testReminder();
