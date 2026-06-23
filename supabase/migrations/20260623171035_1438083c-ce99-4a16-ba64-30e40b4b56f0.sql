@@ -1,0 +1,1 @@
+ALTER TABLE public.log_entries ADD COLUMN IF NOT EXISTS acute_med boolean;

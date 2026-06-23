@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       log_entries: {
         Row: {
+          acute_med: boolean | null
           created_at: string
           entry_date: string
           has_headache: boolean
@@ -25,6 +26,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          acute_med?: boolean | null
           created_at?: string
           entry_date: string
           has_headache: boolean
@@ -34,6 +36,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          acute_med?: boolean | null
           created_at?: string
           entry_date?: string
           has_headache?: boolean
