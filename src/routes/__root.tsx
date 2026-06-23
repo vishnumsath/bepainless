@@ -129,14 +129,17 @@ function RootComponent() {
     });
     registerServiceWorker();
     initReminderFromStorage();
+    const refresh = () => pendingCount().then(setPending);
     installOutboxDrainer(() => {
       queryClient.invalidateQueries({ queryKey: ["entries"] });
-      pendingCount().then(setPending);
+      refresh();
     });
-    pendingCount().then(setPending);
-    const id = setInterval(() => pendingCount().then(setPending), 5000);
-    return () => { data.subscription.unsubscribe(); clearInterval(id); };
+    const offChange = onOutboxChange(refresh);
+    refresh();
+    const id = setInterval(refresh, 5000);
+    return () => { data.subscription.unsubscribe(); clearInterval(id); offChange(); };
   }, [router, queryClient]);
+
 
   const inner = (
     <>
