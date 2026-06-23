@@ -38,7 +38,7 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   const map = new Map(args.entries.map((e) => [e.entry_date, e]));
   const days = eachDayISO(parseISODate(args.start), parseISODate(args.end));
   const total = days.length;
-  let painfreeCount = 0, mild = 0, moderate = 0, severe = 0, headache = 0, unlogged = 0;
+  let painfreeCount = 0, mild = 0, moderate = 0, severe = 0, headache = 0, unlogged = 0, acuteMed = 0;
   for (const d of days) {
     const e = map.get(d);
     if (!e) { unlogged++; continue; }
@@ -48,9 +48,12 @@ export async function downloadSummaryJPG(args: ExportArgs) {
       if (e.severity === "mild") mild++;
       else if (e.severity === "moderate") moderate++;
       else if (e.severity === "severe") severe++;
+      if (e.acute_med) acuteMed++;
     }
   }
   const logged = total - unlogged;
+  const acuteMedPct = headache ? Math.round((acuteMed / headache) * 100) : 0;
+
 
   const M = 80;
   let y = M;
