@@ -52,7 +52,7 @@ export async function downloadSummaryJPG(args: ExportArgs) {
     }
   }
   const logged = total - unlogged;
-  const acuteMedPct = headache ? Math.round((acuteMed / headache) * 100) : 0;
+
 
 
   const M = 80;
