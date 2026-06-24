@@ -134,24 +134,36 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   }
   y += 12;
 
-  // Acute medication summary line
-  ctx.fillStyle = COLORS.text;
-  ctx.font = "700 22px ui-sans-serif, system-ui, sans-serif";
+  // Acute Medication (bar chart, same style as Severity Breakdown)
   ctx.textAlign = "left";
-  ctx.fillText("Acute Medication", M, y + 22);
-  ctx.font = "500 18px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillStyle = COLORS.muted;
-  ctx.textAlign = "right";
-  ctx.fillText(`${acuteMed} of ${headache} headache day${headache === 1 ? "" : "s"}  ·  ${acuteMedPct}%`, W - M, y + 22);
+  ctx.fillStyle = COLORS.text;
+  ctx.font = "700 26px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillText("Acute Medication", M, y + 24);
   y += 50;
 
-
+  const acuteRows = [
+    { label: "Needed", count: acuteMed, color: COLORS.crimson },
+    { label: "Not needed", count: Math.max(0, headache - acuteMed), color: COLORS.blue },
+  ];
+  const acuteDenom = headache || 1;
+  for (const b of acuteRows) {
+    const pct = headache ? Math.round((b.count / acuteDenom) * 100) : 0;
+    const barW = (W - M * 2);
+    ctx.fillStyle = "#F2F2F2"; roundRect(ctx, M, y, barW, 38, 8); ctx.fill();
+    ctx.fillStyle = b.color; roundRect(ctx, M, y, Math.max(2, barW * (pct / 100)), 38, 8); ctx.fill();
+    ctx.fillStyle = COLORS.text;
+    ctx.font = "600 16px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(`${b.label}: ${pct}% (${b.count} day${b.count === 1 ? "" : "s"})`, M + 12, y + 25);
+    y += 52;
+  }
+  y += 24;
 
   // ---- Daily Pattern (with month label on first-of-month, date+day under each block) ----
+  ctx.textAlign = "left";
   ctx.fillStyle = COLORS.text;
   ctx.font = "700 26px ui-sans-serif, system-ui, sans-serif";
   ctx.fillText("Daily Pattern", M, y + 24);
-  y += 50;
+  y += 56;
 
   const availW = W - M * 2;
   const footerH = 70;
