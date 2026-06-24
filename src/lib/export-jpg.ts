@@ -134,29 +134,52 @@ export async function downloadSummaryJPG(args: ExportArgs) {
   }
   y += 12;
 
-  // Acute Medication (bar chart, same style as Severity Breakdown)
+  // Acute Medication (stacked single bar)
   ctx.textAlign = "left";
   ctx.fillStyle = COLORS.text;
   ctx.font = "700 26px ui-sans-serif, system-ui, sans-serif";
   ctx.fillText("Acute Medication", M, y + 24);
   y += 50;
 
-  const acuteRows = [
-    { label: "Needed", count: acuteMed, color: COLORS.crimson },
-    { label: "Not needed", count: Math.max(0, headache - acuteMed), color: COLORS.blue },
-  ];
-  const acuteDenom = headache || 1;
-  for (const b of acuteRows) {
-    const pct = headache ? Math.round((b.count / acuteDenom) * 100) : 0;
-    const barW = (W - M * 2);
-    ctx.fillStyle = "#F2F2F2"; roundRect(ctx, M, y, barW, 38, 8); ctx.fill();
-    ctx.fillStyle = b.color; roundRect(ctx, M, y, Math.max(2, barW * (pct / 100)), 38, 8); ctx.fill();
-    ctx.fillStyle = COLORS.text;
+  const notNeeded = Math.max(0, headache - acuteMed);
+  if (headache === 0) {
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = "500 16px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText("No headache days in this range", M, y + 24);
+    y += 48;
+  } else {
+    const neededPct = Math.round((acuteMed / headache) * 100);
+    const notNeededPct = Math.round((notNeeded / headache) * 100);
+    const barW = W - M * 2;
+    const neededW = Math.max(2, barW * (acuteMed / headache));
+    const notNeededW = Math.max(2, barW - neededW);
+
+    ctx.save();
+    ctx.beginPath(); roundRect(ctx, M, y, barW, 38, 8); ctx.clip();
+    ctx.fillStyle = "#F2F2F2"; ctx.fillRect(M, y, barW, 38);
+    ctx.fillStyle = COLORS.blue; ctx.fillRect(M, y, neededW, 38);
+    ctx.fillStyle = COLORS.painfree; ctx.fillRect(M + neededW, y, notNeededW, 38);
+    ctx.restore();
+
+    y += 48;
+    const legendY = y + 4;
     ctx.font = "600 16px ui-sans-serif, system-ui, sans-serif";
-    ctx.fillText(`${b.label}: ${pct}% (${b.count} day${b.count === 1 ? "" : "s"})`, M + 12, y + 25);
-    y += 52;
+    ctx.textAlign = "left";
+
+    ctx.fillStyle = COLORS.blue; roundRect(ctx, M, legendY, 12, 12, 3); ctx.fill();
+    ctx.fillStyle = COLORS.text;
+    const neededLabel = `Needed: ${neededPct}% (${acuteMed} day${acuteMed === 1 ? "" : "s"})`;
+    ctx.fillText(neededLabel, M + 20, legendY + 11);
+    const neededLabelW = ctx.measureText(neededLabel).width;
+
+    ctx.fillStyle = COLORS.painfree; roundRect(ctx, M + 20 + neededLabelW + 24, legendY, 12, 12, 3); ctx.fill();
+    ctx.fillStyle = COLORS.text;
+    const notNeededLabel = `Not needed: ${notNeededPct}% (${notNeeded} day${notNeeded === 1 ? "" : "s"})`;
+    ctx.fillText(notNeededLabel, M + 20 + neededLabelW + 44, legendY + 11);
+    y += 40;
   }
   y += 24;
+
 
   // ---- Daily Pattern (with month label on first-of-month, date+day under each block) ----
   ctx.textAlign = "left";
