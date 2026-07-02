@@ -7,7 +7,7 @@ export const getProfile = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("profiles")
-      .select("id, name, age, gender, reminder_time, theme")
+      .select("id, name, age, gender, reminder_time, theme, timezone")
       .eq("id", context.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -28,6 +28,7 @@ export const upsertProfile = createServerFn({ method: "POST" })
           .nullable()
           .optional(),
         theme: z.enum(["light", "dark"]).optional(),
+        timezone: z.string().max(64).nullable().optional(),
       })
       .parse(d),
   )

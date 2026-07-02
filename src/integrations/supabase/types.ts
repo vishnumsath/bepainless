@@ -56,6 +56,7 @@ export type Database = {
           name: string | null
           reminder_time: string | null
           theme: string
+          timezone: string | null
           updated_at: string
         }
         Insert: {
@@ -66,6 +67,7 @@ export type Database = {
           name?: string | null
           reminder_time?: string | null
           theme?: string
+          timezone?: string | null
           updated_at?: string
         }
         Update: {
@@ -76,7 +78,41 @@ export type Database = {
           name?: string | null
           reminder_time?: string | null
           theme?: string
+          timezone?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_used_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_used_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_used_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }

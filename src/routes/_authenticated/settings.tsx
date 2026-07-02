@@ -17,7 +17,8 @@ import { getProfile, upsertProfile } from "@/lib/profile.functions";
 import { getAllEntries } from "@/lib/entries.functions";
 import { send } from "@/lib/outbox";
 import { supabase } from "@/integrations/supabase/client";
-import { scheduleReminder, disableReminder, ensureNotificationPermission, notificationsEnabled, testReminder, getReminderTime } from "@/lib/reminders";
+import { disableReminder, ensureNotificationPermission, notificationsEnabled, testReminder, getReminderTime } from "@/lib/reminders";
+import { subscribeToPush, unsubscribeFromPush, pushSupported } from "@/lib/push";
 import { addDays, toISODate } from "@/lib/painless-date";
 import { toast } from "sonner";
 
@@ -59,12 +60,18 @@ function SettingsPage() {
     try { localStorage.setItem("painless-theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
-  // Schedule (persisted) when enabled + time set. Do NOT clear on unmount —
-  // the reminder must survive page navigation.
+  // No in-app timers needed anymore — reminders fire from the server via Web Push.
+  // On first mount, capture the user's IANA timezone if the profile is missing one
+  // (needed so the server knows when local "reminder_time" occurs).
   useEffect(() => {
-    if (!notifOn || !reminder) return;
-    scheduleReminder(reminder);
-  }, [reminder, notifOn]);
+    if (!profile) return;
+    if (profile.timezone) return;
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) upsert({ data: { timezone: tz } }).then(() => qc.invalidateQueries({ queryKey: ["profile"] }));
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   // Instant-save: profile-only fields are saved by the explicit "Save" button.
   // Theme / reminder time / notifications persist instantly here.
@@ -123,16 +130,35 @@ function SettingsPage() {
 
   async function handleToggleNotifications(next: boolean) {
     if (next) {
+      if (!pushSupported()) {
+        toast.error("Push notifications aren't supported in this browser. Install PainLess to your home screen and try again.");
+        return;
+      }
       const ok = await ensureNotificationPermission();
       if (!ok) { toast.error("Notification permission denied"); return; }
-      setNotifOn(true);
-      if (reminder) scheduleReminder(reminder);
+      try {
+        const subscribed = await subscribeToPush();
+        if (!subscribed) { toast.error("Could not enable push"); return; }
+        // Capture / refresh timezone whenever notifications are enabled.
+        try {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (tz && tz !== profile?.timezone) {
+            await upsert({ data: { timezone: tz } });
+            qc.invalidateQueries({ queryKey: ["profile"] });
+          }
+        } catch { /* ignore */ }
+        setNotifOn(true);
+        toast.success("Reminders enabled — you'll get a push at your daily time, even when the app is closed.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not enable push");
+      }
     } else {
       setNotifOn(false);
       disableReminder();
+      try { await unsubscribeFromPush(); } catch { /* ignore */ }
+      toast.success("Reminders disabled on this device.");
     }
   }
-
 
   async function handleTestNotification() {
     const ok = await testReminder();
@@ -288,7 +314,7 @@ function SettingsPage() {
             Send test notification
           </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Notifications include quick actions to log "Headache" or "No Headache". Reminders fire while PainLess is open or recently active — install to your home screen for best results.
+            Reminders are delivered as real push notifications — you'll receive them at your chosen time even if PainLess is closed. Tap "No Headache" or "Log Headache" straight from the notification.
           </p>
         </Card>
       </section>
