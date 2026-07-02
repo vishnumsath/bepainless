@@ -3,7 +3,7 @@
 // - Notification actions ("Log Headache" / "No Headache")
 // - Bridges Background Sync events to open tabs
 
-const VERSION = 'painless-v5';
+const VERSION = 'painless-v6';
 // Precache only PUBLIC URLs. Protected routes redirect to /auth when fetched
 // without a session and would poison the cache.
 const SHELL = ['/', '/auth', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
@@ -81,6 +81,46 @@ self.addEventListener('message', (event) => {
   } else if (data.type === 'skip-waiting') {
     self.skipWaiting();
   }
+});
+
+// Web Push (payload-less). The server sends an empty push; we render a
+// generic reminder here so the notification appears even when no tab is open.
+self.addEventListener('push', (event) => {
+  let title = 'PainLess check-in';
+  let body = 'Did you have a headache today?';
+  try {
+    if (event.data) {
+      const j = event.data.json();
+      if (j && typeof j === 'object') {
+        if (j.title) title = String(j.title);
+        if (j.body) body = String(j.body);
+      }
+    }
+  } catch { /* payload-less push — use defaults */ }
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: 'painless-daily',
+      renotify: true,
+      requireInteraction: false,
+      actions: [
+        { action: 'nopain', title: 'No Headache' },
+        { action: 'headache', title: 'Log Headache' },
+      ],
+      data: { url: '/today' },
+    })
+  );
+});
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  // Notify any open tab so it can re-subscribe and persist the new endpoint.
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) c.postMessage({ type: 'pushsubscriptionchange' });
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {
