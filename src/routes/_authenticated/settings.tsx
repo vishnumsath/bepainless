@@ -314,7 +314,7 @@ function SettingsPage() {
             Send test notification
           </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Notifications include quick actions to log "Headache" or "No Headache". Reminders fire while PainLess is open or recently active — install to your home screen for best results.
+            Reminders are delivered as real push notifications — you'll receive them at your chosen time even if PainLess is closed. Tap "No Headache" or "Log Headache" straight from the notification.
           </p>
         </Card>
       </section>
