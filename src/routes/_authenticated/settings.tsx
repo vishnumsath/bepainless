@@ -159,6 +159,8 @@ function SettingsPage() {
       toast.success("Reminders disabled on this device.");
     }
   }
+
+  async function handleTestNotification() {
     const ok = await testReminder();
     if (!ok) toast.error("Enable notifications first");
   }
