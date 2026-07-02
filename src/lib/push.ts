@@ -42,7 +42,7 @@ export async function subscribeToPush(): Promise<boolean> {
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as unknown as BufferSource,
     });
   }
   const p256dh = bufToB64Url(sub.getKey("p256dh"));
