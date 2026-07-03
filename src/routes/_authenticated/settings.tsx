@@ -315,7 +315,19 @@ function SettingsPage() {
               <Bell className="h-4 w-4" />
               <Label htmlFor="notif" className="text-sm">Enable notifications</Label>
             </div>
-            <Switch id="notif" checked={notifOn} onCheckedChange={handleToggleNotifications} />
+            <Switch id="notif" size="lg" checked={notifOn} onCheckedChange={handleToggleNotifications} />
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className={cn("h-2 w-2 rounded-full", notifOn ? "bg-green-500" : "bg-muted-foreground/50")} />
+            <span className="text-muted-foreground">
+              {notifOn
+                ? `Active — next reminder at ${reminder || "—"}${profile?.timezone ? ` (${profile.timezone})` : ""}`
+                : typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied"
+                  ? "Permission denied — enable in browser settings"
+                  : !pushSupported()
+                    ? "Not supported in this browser"
+                    : "Reminders off"}
+            </span>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reminder">Daily check-in time</Label>
