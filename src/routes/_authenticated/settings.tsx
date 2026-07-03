@@ -18,7 +18,7 @@ import { getAllEntries } from "@/lib/entries.functions";
 import { send } from "@/lib/outbox";
 import { supabase } from "@/integrations/supabase/client";
 import { disableReminder, ensureNotificationPermission, notificationsEnabled, testReminder, getReminderTime } from "@/lib/reminders";
-import { subscribeToPush, unsubscribeFromPush, pushSupported } from "@/lib/push";
+import { subscribeToPush, unsubscribeFromPush, pushSupported, currentPushEndpoint } from "@/lib/push";
 import { addDays, toISODate } from "@/lib/painless-date";
 import { toast } from "sonner";
 
