@@ -18,7 +18,7 @@ import { getAllEntries } from "@/lib/entries.functions";
 import { send } from "@/lib/outbox";
 import { supabase } from "@/integrations/supabase/client";
 import { disableReminder, ensureNotificationPermission, notificationsEnabled, testReminder, getReminderTime } from "@/lib/reminders";
-import { subscribeToPush, unsubscribeFromPush, pushSupported } from "@/lib/push";
+import { subscribeToPush, unsubscribeFromPush, pushSupported, currentPushEndpoint } from "@/lib/push";
 import { addDays, toISODate } from "@/lib/painless-date";
 import { toast } from "sonner";
 
@@ -52,7 +52,18 @@ function SettingsPage() {
     setTheme((profile.theme as "light" | "dark") ?? "dark");
   }, [profile]);
 
-  useEffect(() => { setNotifOn(notificationsEnabled()); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") { if (!cancelled) setNotifOn(false); return; }
+      try {
+        const ep = await currentPushEndpoint();
+        if (!cancelled) setNotifOn(!!ep);
+      } catch { if (!cancelled) setNotifOn(notificationsEnabled()); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const d = document.documentElement;
