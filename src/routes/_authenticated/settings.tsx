@@ -21,6 +21,7 @@ import { disableReminder, ensureNotificationPermission, notificationsEnabled, te
 import { subscribeToPush, unsubscribeFromPush, pushSupported, currentPushEndpoint } from "@/lib/push";
 import { addDays, toISODate } from "@/lib/painless-date";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Settings — PainLess" }] }),
