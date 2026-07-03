@@ -52,7 +52,18 @@ function SettingsPage() {
     setTheme((profile.theme as "light" | "dark") ?? "dark");
   }, [profile]);
 
-  useEffect(() => { setNotifOn(notificationsEnabled()); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") { if (!cancelled) setNotifOn(false); return; }
+      try {
+        const ep = await currentPushEndpoint();
+        if (!cancelled) setNotifOn(!!ep);
+      } catch { if (!cancelled) setNotifOn(notificationsEnabled()); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const d = document.documentElement;
