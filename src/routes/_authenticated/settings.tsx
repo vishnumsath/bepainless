@@ -239,6 +239,7 @@ function SettingsPage() {
         date: String(r.date ?? r.entry_date),
         has_headache: !!r.has_headache,
         severity: r.severity ?? null,
+        acute_med: typeof r.acute_med === "boolean" ? r.acute_med : null,
       })).filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date));
       if (!parsed.length) throw new Error("No valid entries found");
       await send({ kind: "import", entries: parsed });
