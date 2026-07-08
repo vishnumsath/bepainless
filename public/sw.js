@@ -76,7 +76,7 @@ self.addEventListener('message', (event) => {
         { action: 'nopain', title: 'No Headache' },
         { action: 'headache', title: 'Log Headache' },
       ],
-      data: { url: '/today' },
+      data: { url: '/today?action=ask' },
     });
   } else if (data.type === 'skip-waiting') {
     self.skipWaiting();
@@ -110,7 +110,7 @@ self.addEventListener('push', (event) => {
         { action: 'nopain', title: 'No Headache' },
         { action: 'headache', title: 'Log Headache' },
       ],
-      data: { url: '/today' },
+      data: { url: '/today?action=ask' },
     })
   );
 });
@@ -126,9 +126,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const action = event.action || 'open';
-  const target = action === 'headache' ? '/today?action=headache'
-              : action === 'nopain' ? '/today?action=nopain'
-              : '/today';
+  const target = '/today?action=ask';
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of all) {
