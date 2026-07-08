@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const searchSchema = z.object({
-  action: z.enum(["headache", "nopain"]).optional(),
+  action: z.enum(["headache", "nopain", "ask"]).optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/today")({
@@ -43,6 +43,7 @@ function TodayPage() {
   const [step, setStep] = useState<"ask" | "severity" | "acuteMed">("ask");
   const [pickedSeverity, setPickedSeverity] = useState<Severity | null>(null);
   const [justSaved, setJustSaved] = useState<null | { has_headache: boolean; severity: Severity | null; acute_med: boolean | null }>(null);
+  const [fromNotification, setFromNotification] = useState(false);
 
   const saving = useMutation({
     mutationFn: async (vars: { has_headache: boolean; severity: Severity | null; acute_med: boolean | null }) => {
@@ -62,13 +63,12 @@ function TodayPage() {
   const handled = useRef(false);
   useEffect(() => {
     if (handled.current) return;
-    if (search.action === "nopain") {
+    if (search.action === "ask" || search.action === "headache" || search.action === "nopain") {
       handled.current = true;
-      saving.mutate({ has_headache: false, severity: null, acute_med: null });
-      navigate({ to: "/today", search: {}, replace: true });
-    } else if (search.action === "headache") {
-      handled.current = true;
-      setStep("severity");
+      setFromNotification(true);
+      setStep("ask");
+      setPickedSeverity(null);
+      setJustSaved(null);
       navigate({ to: "/today", search: {}, replace: true });
     }
   }, [search.action, navigate, saving]);
@@ -84,7 +84,7 @@ function TodayPage() {
 
         {isLoading ? (
           <div className="mt-10 h-32 w-32 animate-pulse rounded-full bg-muted" />
-        ) : logged && step === "ask" ? (
+        ) : !fromNotification && logged && step === "ask" ? (
           <LoggedState
             entry={todayEntry ?? justSaved!}
             onEdit={() => navigate({ to: "/history", search: { date } })}
@@ -104,8 +104,8 @@ function TodayPage() {
         ) : (
           <AskPrompt
             disabled={saving.isPending}
-            onNo={() => saving.mutate({ has_headache: false, severity: null, acute_med: null })}
-            onYes={() => setStep("severity")}
+            onNo={() => { setFromNotification(false); saving.mutate({ has_headache: false, severity: null, acute_med: null }); }}
+            onYes={() => { setFromNotification(false); setStep("severity"); }}
           />
         )}
       </section>
